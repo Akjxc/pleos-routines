@@ -15,7 +15,11 @@ class RoutineStore(context: Context) {
         return try {
             val root = JSONObject(raw)
             val schemaVersion = root.optInt("schemaVersion", 1)
-            require(schemaVersion in 1..3)
+            require(schemaVersion in 1..4)
+            fun noticeMessage(id: String, message: String): String =
+                if (id == "template-ac-dry" &&
+                    message == "A/C를 끄고 5분간 에어컨 건조를 시작합니다.")
+                    "A/C를 끄고 현재 송풍을 유지합니다." else message
             val array = root.getJSONArray("routines")
             val loadedRoutines = (0 until array.length()).map {
                 val r = array.getJSONObject(it)
@@ -35,7 +39,7 @@ class RoutineStore(context: Context) {
                             action = Action.valueOf(actObj.getString("action")),
                             targetAreaId = actObj.optString("area", ""),
                             temperatureC = actObj.optDouble("temperature", 23.0).toFloat(),
-                            message = actObj.optString("message", "안내문"),
+                            message = noticeMessage(r.getString("id"), actObj.optString("message", "안내문")),
                             fanSpeed = actObj.optInt("fan", 3)
                         ))
                     }
@@ -47,7 +51,7 @@ class RoutineStore(context: Context) {
                     trigger = Trigger.valueOf(r.getString("trigger")),
                     action = Action.valueOf(r.getString("action")),
                     thresholdPercent = r.getInt("threshold"),
-                    message = r.getString("message"),
+                    message = noticeMessage(r.getString("id"), r.getString("message")),
                     targetAreaId = r.getString("area"),
                     temperatureC = r.getDouble("temperature").toFloat(),
                     hour = r.optInt("hour", 8),
@@ -87,7 +91,13 @@ class RoutineStore(context: Context) {
                 )
             }
             val existingIds = loadedRoutines.map { it.id }.toSet()
-            val missingTemplates = templates().filter { it.id !in existingIds }
+            // Older versions cannot distinguish deleted presets from never offered ones.
+            // Preserve their absence and only introduce the new arrival preset once.
+            val offered = root.optJSONArray("offeredTemplateIds")?.let { a ->
+                (0 until a.length()).map { a.getString(it) }.toSet()
+            } ?: templates().filterNot { it.id == "template-arrival" }.map { it.id }.toSet()
+            val missingTemplates = templates().filter { it.id !in offered && it.id !in existingIds }
+                .take((30 - loadedRoutines.size).coerceAtLeast(0))
             val routines = loadedRoutines + missingTemplates
 
             require(routines.size <= 30 && routines.map { it.id }.distinct().size == routines.size)
@@ -97,14 +107,19 @@ class RoutineStore(context: Context) {
             })
             val latchArray = root.getJSONArray("latched")
             val records = root.getJSONArray("records")
-            StoredState(
+            val restored = StoredState(
                 routines,
                 (0 until latchArray.length()).map { latchArray.getString(it) }.toSet(),
                 (0 until records.length()).map {
                     val record = records.getJSONObject(it)
                     RunRecord(record.getLong("time"), record.getString("name"), record.getString("detail"))
-                }.take(20)
+                }.take(20),
+                offered + templates().map { it.id }
             )
+            if (schemaVersion < 4 || restored.offeredTemplateIds != offered) {
+                if (!save(restored)) recoveryWarning = "이전 루틴은 읽었지만 저장 형식 갱신을 저장하지 못했습니다."
+            }
+            restored
         } catch (_: Exception) {
             recoveryWarning = "저장 데이터를 읽지 못해 비활성 템플릿으로 복구했습니다."
             StoredState(templates())
@@ -112,7 +127,8 @@ class RoutineStore(context: Context) {
     }
 
     fun save(state: StoredState): Boolean = prefs.edit().putString("state", JSONObject().apply {
-        put("schemaVersion", 3)
+        put("schemaVersion", 4)
+        put("offeredTemplateIds", JSONArray(state.offeredTemplateIds.toList()))
         put("routines", JSONArray().apply {
             state.routines.forEach { r ->
                 put(JSONObject().apply {

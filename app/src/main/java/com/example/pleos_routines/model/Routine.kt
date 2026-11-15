@@ -88,7 +88,10 @@ data class Routine(
 }
 
 data class RunRecord(val time: Long, val routineName: String, val detail: String)
-data class StoredState(val routines: List<Routine>, val latched: Set<String> = emptySet(), val records: List<RunRecord> = emptyList())
+data class StoredState(
+    val routines: List<Routine>, val latched: Set<String> = emptySet(), val records: List<RunRecord> = emptyList(),
+    val offeredTemplateIds: Set<String> = templates().map { it.id }.toSet()
+)
 
 fun templates() = listOf(
     Routine(
@@ -104,7 +107,16 @@ fun templates() = listOf(
         id = "template-ac-dry", name = "에어컨 자동 건조", enabled = false, trigger = Trigger.GEAR, gearParked = true,
         actions = listOf(
             ActionItem(action = Action.VENTILATE),
-            ActionItem(action = Action.NOTICE, message = "A/C를 끄고 5분간 에어컨 건조를 시작합니다.")
+            ActionItem(action = Action.NOTICE, message = "A/C를 끄고 현재 송풍을 유지합니다.")
+        )
+    ),
+    Routine(
+        id = "template-arrival", name = "도착 전 송풍", enabled = false, trigger = Trigger.LOCATION,
+        radiusMeters = 500f,
+        conditions = RoutineConditions(acOn = true, powerOn = true, requireDefrostOff = true),
+        actions = listOf(
+            ActionItem(action = Action.VENTILATE),
+            ActionItem(action = Action.NOTICE, message = "도착 전 A/C를 끄고 기존 송풍을 유지합니다.")
         )
     ),
     Routine(id = "template-battery", name = "스마트 ECO 안내", enabled = false, trigger = Trigger.BATTERY_BELOW, thresholdPercent = 30),

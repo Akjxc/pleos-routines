@@ -6,6 +6,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutomationTest {
+    @Test fun waitingReasonExplainsConditionsWithoutConsumingScheduledEvent() {
+        val engine = RoutineEngine()
+        val routine = Routine(id = "status", enabled = true, trigger = Trigger.AT_TIME, hour = 8,
+            conditions = RoutineConditions(parked = true))
+        val environment = Environment(1000, "2026-11-15", 480, parked = true)
+        assertTrue(engine.waitingReason(routine, environment.copy(parked = null)).contains("주차"))
+        assertTrue(engine.waitingReason(routine, environment.copy(dayOfWeek = 7)).contains("실행 시각"))
+        assertTrue(engine.latched.isEmpty())
+        assertEquals(1, engine.evaluate(listOf(routine), environment).size)
+        assertTrue(engine.waitingReason(routine, environment).contains("오늘 이벤트 감지 완료"))
+    }
+
+    @Test fun waitingReasonExplainsDisabledWeekdayAndStaleLocation() {
+        val engine = RoutineEngine()
+        assertEquals("꺼짐", engine.waitingReason(Routine(), env()))
+        val scheduled = routine(Trigger.AT_TIME).copy(daysOfWeek = listOf(1, 2, 3, 4, 5))
+        assertTrue(engine.waitingReason(scheduled, env().copy(dayOfWeek = 7)).contains("요일"))
+        val location = routine(Trigger.LOCATION).copy(latitude = 0.0, longitude = 0.0)
+        assertTrue(engine.waitingReason(location, env(location = GeoPoint(0.0, 0.0, 5f, now - 31000))).contains("위치"))
+    }
     private val now = 1_000_000L
     private fun env(soc: Int? = 50, parked: Boolean? = true, location: GeoPoint? = null, minute: Int = 480) =
         Environment(nowMs = now, dateKey = "2026-11-15", minuteOfDay = minute, soc = soc,

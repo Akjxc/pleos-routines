@@ -9,15 +9,47 @@ class RoutineEngine(val latched: MutableSet<String> = mutableSetOf()) {
 
     fun resetTransitions() { locations.clear(); gears.clear() }
 
-    fun conditionsMatch(r: Routine, env: Environment): Boolean {
+    fun conditionsMatch(r: Routine, env: Environment): Boolean = conditionProblem(r, env) == null
+
+    fun conditionProblem(r: Routine, env: Environment): String? {
         val targetArea = r.effectiveActions.firstOrNull { it.targetAreaId.isNotBlank() }?.targetAreaId ?: r.targetAreaId
-        return r.effectiveConditions.all { c ->
-            when (c.kind) {
+        return r.effectiveConditions.firstNotNullOfOrNull { c ->
+            val matches = when (c.kind) {
                 ConditionKind.AC_STATE -> c.acOn != null && areaValue(env.acStates, targetArea) == c.acOn
                 ConditionKind.POWER_STATE -> c.powerOn != null && areaValue(env.powerStates, targetArea) == c.powerOn
                 ConditionKind.PARKED_STATE -> c.parked != null && env.parked == c.parked
                 ConditionKind.DEFROST_OFF -> c.requireDefrostOff && env.defrostActive == false
                 ConditionKind.BATTERY_RANGE -> env.soc != null && env.soc in (c.batteryMin ?: 0)..(c.batteryMax ?: 100)
+            }
+            if (matches) null else "${c.title()} 조건 불충족 또는 상태 미확인"
+        }
+    }
+
+    /** Read-only explanation: never advances transitions or consumes a trigger. */
+    fun waitingReason(r: Routine, env: Environment): String {
+        if (!r.enabled) return "꺼짐"
+        conditionProblem(r, env)?.let { return it }
+        return when (r.trigger) {
+            Trigger.MANUAL -> if (env.parked == true) "수동 실행 대기" else "P단 확인 필요"
+            Trigger.BATTERY_BELOW -> when {
+                env.soc == null || env.soc !in 0..100 -> "배터리 상태 미확인"
+                r.id in latched -> "현재 저전력 구간 감지 완료 · ${r.thresholdPercent + 3}% 이상 회복 대기"
+                else -> "배터리 ${r.thresholdPercent}% 이하 대기"
+            }
+            Trigger.AT_TIME -> when {
+                r.daysOfWeek.isNotEmpty() && env.dayOfWeek !in r.daysOfWeek -> "실행 요일 아님 · ${r.daysText()}"
+                "time:${r.id}:${env.dateKey}" in latched -> "오늘 이벤트 감지 완료 · 다음 실행일 대기"
+                else -> "실행 시각 대기 · %02d:%02d".format(r.hour, r.minute)
+            }
+            Trigger.GEAR -> if (env.parked == null) "기어 상태 미확인" else
+                "${if (r.gearParked) "P단 진입" else "P단 이탈"} 대기"
+            Trigger.LOCATION -> {
+                val p = env.location
+                when {
+                    p == null || env.nowMs - p.timestampMs !in 0..30000 -> "최신 차량 위치 대기"
+                    r.latitude == null || r.longitude == null -> "편집에서 위치 설정 필요"
+                    else -> "위치 ${if (r.locationExit) "이탈" else "진입"} 대기 · 중심까지 ${distance(p.latitude, p.longitude, r.latitude, r.longitude).toInt()}m"
+                }
             }
         }
     }

@@ -323,8 +323,9 @@ class PleosVehicleGateway(private val context: Context) {
         executeClimate(Routine(action = Action.SET_TEMPERATURE, targetAreaId = areaId, temperatureC = celsius), onResult = onResult)
     }
 
-    fun executeClimate(routine: Routine, validateConditions: () -> Boolean = { true }, onResult: (ActionResult) -> Unit) {
-        if (Looper.myLooper() != Looper.getMainLooper()) { main.post { executeClimate(routine, validateConditions, onResult) }; return }
+    fun executeClimate(routine: Routine, validateConditions: () -> Boolean = { true },
+        conditionAreaId: String = routine.targetAreaId, onResult: (ActionResult) -> Unit) {
+        if (Looper.myLooper() != Looper.getMainLooper()) { main.post { executeClimate(routine, validateConditions, conditionAreaId, onResult) }; return }
         val sdk = vehicle
         val key = routine.targetAreaId
         val area = seats[key]
@@ -369,8 +370,8 @@ class PleosVehicleGateway(private val context: Context) {
             }
             val conditionsMatch = routine.effectiveConditions.all { condition ->
                 when (condition.kind) {
-                    ConditionKind.AC_STATE -> condition.acOn != null && areaValue(before.acStates, key) == condition.acOn
-                    ConditionKind.POWER_STATE -> condition.powerOn != null && areaValue(before.powerStates, key) == condition.powerOn
+                    ConditionKind.AC_STATE -> condition.acOn != null && areaValue(before.acStates, conditionAreaId) == condition.acOn
+                    ConditionKind.POWER_STATE -> condition.powerOn != null && areaValue(before.powerStates, conditionAreaId) == condition.powerOn
                     ConditionKind.BATTERY_RANGE -> true
                     ConditionKind.PARKED_STATE -> true
                     ConditionKind.DEFROST_OFF -> condition.requireDefrostOff && before.defrostActive == false

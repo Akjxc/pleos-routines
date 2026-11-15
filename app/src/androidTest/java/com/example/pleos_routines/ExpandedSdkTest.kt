@@ -5,6 +5,7 @@ import android.os.Looper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.pleos_routines.model.*
+import com.example.pleos_routines.routine.RoutineActionRunner
 import com.example.pleos_routines.vehicle.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -40,7 +41,29 @@ class ExpandedSdkTest {
             execute(Routine(action=Action.SET_FAN,targetAreaId=fanArea,fanSpeed=3))
             val acArea=s.acAreas.first()
             execute(Routine(action=Action.AC_ON,targetAreaId=acArea))
-            execute(Routine(action=Action.VENTILATE,targetAreaId=acArea))
+            val chainDone = CountDownLatch(1)
+            val chainResult = AtomicReference<ActionResult>()
+            val notice = AtomicReference<String>()
+            main.post {
+                RoutineActionRunner({
+                    val latest = state.get()
+                    Environment(System.currentTimeMillis(), "2026-11-15", 0,
+                        soc = latest.soc, acStates = latest.acStates, powerStates = latest.powerStates,
+                        defrostActive = latest.defrostActive)
+                }, { true }, { action, guard, done -> gateway.executeClimate(action, guard, onResult = done) },
+                    { notice.set(it) }).run(Routine(enabled = true,
+                    conditions = RoutineConditions(acOn = true, powerOn = true, requireDefrostOff = true),
+                    actions = listOf(ActionItem(Action.VENTILATE, acArea),
+                        ActionItem(Action.NOTICE, message = "실제 송풍 전환 확인")))) {
+                    chainResult.set(it); chainDone.countDown()
+                }
+            }
+            assertTrue("chain timeout", chainDone.await(20, TimeUnit.SECONDS))
+            assertTrue(chainResult.get().detail, chainResult.get().confirmed)
+            assertTrue(chainResult.get().detail.contains("1. 성공"))
+            assertTrue(chainResult.get().detail.contains("2. 성공"))
+            assertEquals("실제 송풍 전환 확인", notice.get())
+            println("ACTUAL CHAIN ${chainResult.get().detail}")
             execute(Routine(action=Action.AC_ON,targetAreaId=acArea))
         } finally { main.post { gateway.stop() } }
         val fix=CountDownLatch(1); val point=AtomicReference<GeoPoint>()

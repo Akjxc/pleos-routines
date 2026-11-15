@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.example.pleos_routines.data.RoutineStore
 import com.example.pleos_routines.model.*
 import com.example.pleos_routines.routine.RoutineEngine
+import com.example.pleos_routines.routine.RoutineActionRunner
 import com.example.pleos_routines.ui.RoutineEditorDialog
 import com.example.pleos_routines.vehicle.*
 import com.google.android.material.button.MaterialButton
@@ -35,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private var vehicle = VehicleSnapshot()
     private var started = false
     private var busy = false
+    private var runningRoutineId: String? = null
+    private val routineStateViews = mutableMapOf<String, TextView>()
     private var screenSession = 0
     private var editor: AlertDialog? = null
     private lateinit var locationSource: PleosLocationSource
@@ -133,12 +136,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun record(routine: Routine, detail: String, countAsRun: Boolean = true) {
-        val updated = if (countAsRun) {
-            routine.copy(runCount = routine.runCount + 1, lastRunTimeMs = System.currentTimeMillis())
-        } else {
-            routine
+        // A queued event may hold an older snapshot; never overwrite newer settings/statistics.
+        routines = routines.map { current ->
+            if (countAsRun && current.id == routine.id)
+                current.copy(runCount = current.runCount + 1, lastRunTimeMs = System.currentTimeMillis())
+            else current
         }
-        routines = routines.map { if (it.id == updated.id) updated else it }
         records = (listOf(RunRecord(System.currentTimeMillis(), routine.name, detail)) + records).take(20)
         save()
         if (started) { renderRoutines(); renderHistory() }
@@ -177,48 +180,16 @@ class MainActivity : AppCompatActivity() {
         validateConditions: () -> Boolean,
         onResult: (ActionResult) -> Unit
     ) {
-        val actions = routine.effectiveActions
-        val details = mutableListOf<String>()
-
-        fun runAt(index: Int) {
-            if (index >= actions.size) {
-                onResult(ActionResult(true, details.joinToString(" · ").ifEmpty { "실행 완료" }))
-                return
-            }
-            val item = actions[index]
-            if (!validateConditions()) {
-                onResult(ActionResult(false, "실행 중 조건 변경 또는 현재 상태 미확인 · 이후 동작은 보류"))
-                return
-            }
-            if (item.action == Action.NOTICE) {
-                notice(item.message)
-                details += "안내 표시"
-                runAt(index + 1)
-                return
-            }
-            val singleAction = routine.copy(
-                action = item.action,
-                targetAreaId = item.targetAreaId,
-                temperatureC = item.temperatureC,
-                message = item.message,
-                fanSpeed = item.fanSpeed,
-                actions = emptyList()
-            )
-            gateway.executeClimate(singleAction, validateConditions) { result ->
-                if (!result.confirmed) {
-                    onResult(result)
-                } else {
-                    details += result.detail
-                    runAt(index + 1)
-                }
-            }
-        }
-
-        runAt(0)
+        val conditionArea = routine.effectiveActions.firstOrNull { it.targetAreaId.isNotBlank() }?.targetAreaId
+            ?: routine.targetAreaId
+        RoutineActionRunner(::environment, validateConditions, { action, guard, done ->
+            gateway.executeClimate(action, guard, conditionAreaId = conditionArea, onResult = done)
+        }, ::notice).run(routine, onResult)
     }
 
     private fun evaluateBattery() {
         if (!started) return
+        renderRoutineStates()
         val previous = engine.latched.toSet()
         val matches = engine.evaluate(routines, environment())
         if (previous != engine.latched && !save()) {
@@ -239,15 +210,14 @@ class MainActivity : AppCompatActivity() {
             record(event, "자동 실행 건너뜀 · ${problem ?: "조건 변경 또는 이벤트 만료"}", countAsRun = false)
             drainAutomatic(); return
         }
-        busy = true; renderRoutines(); updateControls(); val token = screenSession
+        busy = true; runningRoutineId = event.id; renderRoutines(); updateControls(); val token = screenSession
         executeRoutineActions(event, validateConditions = {
             started && token == screenSession &&
-                routines.find { it.id == event.id } == event &&
-                engine.conditionsMatch(event, environment())
+                routines.find { it.id == event.id } == event
         }) { result ->
-            busy = false
+            busy = false; runningRoutineId = null
+            record(event, result.detail, countAsRun = result.confirmed)
             if (started && token == screenSession) {
-                record(event, result.detail, countAsRun = result.confirmed)
                 notice("${event.name} · ${result.detail}"); renderRoutines(); drainAutomatic()
             }
         }
@@ -296,32 +266,32 @@ class MainActivity : AppCompatActivity() {
         if (!routine.enabled || routine.trigger != Trigger.MANUAL) return
         if (!engine.conditionsMatch(routine, environment())) { notice("추가 조건을 충족하지 않거나 상태를 확인할 수 없습니다."); return }
         if (busy) return
-        busy = true; updateControls(); renderRoutines()
+        busy = true; runningRoutineId = routine.id; updateControls(); renderRoutines()
         val token = screenSession
         parking.requireParked({
             val current = routines.find { it.id == routine.id }
             if (!started || token != screenSession || current?.enabled != true || current != routine) {
-                busy = false; if (started) renderRoutines(); return@requireParked
+                busy = false; runningRoutineId = null; if (started) renderRoutines(); return@requireParked
             }
             val error = routineProblem(current) ?: if (!engine.conditionsMatch(current, environment())) "추가 조건이 변경되었습니다." else null
-            if (error != null) { busy = false; notice(error); renderRoutines(); return@requireParked }
+            if (error != null) { busy = false; runningRoutineId = null; notice(error); renderRoutines(); return@requireParked }
             notice("${current.name} · 공조 요청 중")
             executeRoutineActions(current, validateConditions = {
                 started && token == screenSession &&
                     parking.parked == true &&
-                    routines.find { it.id == current.id } == current &&
-                    engine.conditionsMatch(current, environment())
+                    routines.find { it.id == current.id } == current
             }) { result ->
-                busy = false
-                if (token != screenSession) { if (started) { renderRoutines(); updateControls() }; return@executeRoutineActions }
+                busy = false; runningRoutineId = null
                 record(routine, result.detail, countAsRun = result.confirmed)
+                if (token != screenSession) { if (started) { renderRoutines(); updateControls() }; return@executeRoutineActions }
                 if (started) { notice("${routine.name} · ${result.detail}"); renderRoutines(); updateControls(); drainAutomatic() }
             }
-        }, { busy = false; if (started) { notice("P단 확인 후 공조를 실행할 수 있습니다."); renderRoutines(); updateControls() } })
+        }, { busy = false; runningRoutineId = null; if (started) { notice("P단 확인 후 공조를 실행할 수 있습니다."); renderRoutines(); updateControls() } })
     }
 
     private fun renderRoutines() {
         val list = findViewById<LinearLayout>(R.id.routine_list); list.removeAllViews()
+        routineStateViews.clear()
         if (routines.isEmpty()) list.addView(text("아직 루틴이 없습니다. + 루틴 추가로 시작하세요.", 18))
         routines.forEach { routine ->
             val card = LinearLayout(this).apply {
@@ -343,6 +313,9 @@ class MainActivity : AppCompatActivity() {
                 "없음"
             }
             card.addView(text(routine.summary(), 17))
+            val state = text("", 15).apply { setTextColor(Color.rgb(115, 223, 192)) }
+            routineStateViews[routine.id] = state
+            card.addView(state)
             card.addView(text("실행 ${routine.runCount}회 · 최근 실행 $lastRun", 14).apply {
                 setTextColor(Color.rgb(185, 201, 216))
                 setPadding(0, dp(4), 0, dp(4))
@@ -362,7 +335,20 @@ class MainActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
             card.addView(buttons); list.addView(card)
         }
+        renderRoutineStates()
         updateControls()
+    }
+
+    private fun renderRoutineStates() {
+        val env = environment()
+        routines.forEach { routine ->
+            routineStateViews[routine.id]?.text = when {
+                busy && runningRoutineId == routine.id -> "실행 중"
+                !routine.enabled -> "꺼짐"
+                else -> routineProblem(routine)?.let { "설정 필요 · $it" }
+                    ?: engine.waitingReason(routine, env)
+            }
+        }
     }
 
     private fun renderHistory() {

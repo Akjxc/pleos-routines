@@ -29,7 +29,9 @@ class LocationRoutineFlowTest {
         val name="위치 자동 송풍 검증"
         val routine=Routine(id="test-location-entry",name=name,enabled=true,trigger=Trigger.LOCATION,
             action=Action.VENTILATE,targetAreaId=acArea.get(),latitude=37.0,longitude=127.0,radiusMeters=500f,
-            conditions=RoutineConditions(acOn=true,powerOn=true,requireDefrostOff=true))
+            conditions=RoutineConditions(acOn=true,powerOn=true,requireDefrostOff=true),
+            actions=listOf(ActionItem(Action.VENTILATE,acArea.get()),
+                ActionItem(Action.NOTICE,message="위치 진입 송풍 전환 완료")))
         assertTrue(store.save(original.copy(routines=original.routines+routine)))
         var scenario:ActivityScenario<MainActivity>?=null
         try {
@@ -43,7 +45,10 @@ class LocationRoutineFlowTest {
             }
             assertNotNull("No actual location-entry execution was recorded",record)
             println("ACTUAL GEOFENCE RESULT ${record!!.detail}")
-            assertTrue(record.detail,record.detail.startsWith("적용 확인"))
+            assertTrue(record.detail,record.detail.contains("적용 확인"))
+            assertTrue(record.detail,record.detail.contains("1. 성공"))
+            assertTrue(record.detail,record.detail.contains("2. 성공"))
+            assertEquals(1,store.load().routines.first {it.id==routine.id}.runCount)
         } finally { scenario?.close();assertTrue(store.save(original)) }
     }
 }

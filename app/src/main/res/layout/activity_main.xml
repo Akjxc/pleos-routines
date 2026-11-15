@@ -4,7 +4,7 @@
     android:orientation="vertical" android:padding="28dp" android:background="#101A28">
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PLEOS ROUTINES" android:textSize="14sp" android:textColor="#73DFC0" android:letterSpacing="0.14" />
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="내 차에 맞춘 작은 자동화" android:textColor="#FFFFFF" android:textSize="30sp" android:layout_marginTop="8dp" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="앱을 열어둔 동안 차량 상태를 확인합니다. 루틴 설정과 공조 실행은 P단에서 사용할 수 있습니다." android:textColor="#B9C9D8" android:textSize="16sp" android:layout_marginTop="8dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="앱을 열어둔 동안 자동 실행합니다. 편집과 수동 실행은 P단에서 가능합니다. 자동 공조는 주행 중에도 실행하며 성에 제거를 우선합니다." android:textColor="#B9C9D8" android:textSize="16sp" android:layout_marginTop="8dp" />
     <TextView android:id="@+id/vehicle_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="80dp" android:padding="16dp" android:layout_marginTop="20dp" android:background="#1B2B40" android:textColor="#FFFFFF" android:textSize="18sp" />
     <TextView android:id="@+id/notice_banner" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="14dp" android:layout_marginTop="12dp" android:background="#244C43" android:textColor="#E2FFF3" android:textSize="18sp" android:visibility="gone" android:accessibilityLiveRegion="polite" />
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:layout_marginTop="16dp">

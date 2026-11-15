@@ -500,6 +500,17 @@ class RoutineEditorDialog(
         }
         loadSelectedAction = {
             val selected = currentActionItem()
+            // Each card owns its values, including adjacent cards of the same type.
+            activeAction = null
+            activeArea = null
+            temperatureChoices = emptyList()
+            fanChoices = emptyList()
+            rememberedAreas.clear()
+            rememberedTemperatures.clear()
+            rememberedFans.clear()
+            rememberedAreas[selected.action] = selected.targetAreaId
+            rememberedTemperatures[selected.targetAreaId] = selected.temperatureC
+            rememberedFans[selected.targetAreaId] = selected.fanSpeed
             action.setSelection(actions.indexOf(selected.action).coerceAtLeast(0))
             message.setText(selected.message)
             updateAction()
