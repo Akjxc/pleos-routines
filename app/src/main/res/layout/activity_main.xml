@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="28dp" android:background="#101A28">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PLEOS ROUTINES" android:textSize="14sp" android:textColor="#73DFC0" android:letterSpacing="0.14" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="내 차에 맞춘 작은 자동화" android:textColor="#FFFFFF" android:textSize="30sp" android:layout_marginTop="8dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="앱을 열어둔 동안 차량 상태를 확인합니다. 루틴 설정과 공조 실행은 P단에서 사용할 수 있습니다." android:textColor="#B9C9D8" android:textSize="16sp" android:layout_marginTop="8dp" />
+    <TextView android:id="@+id/vehicle_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="80dp" android:padding="16dp" android:layout_marginTop="20dp" android:background="#1B2B40" android:textColor="#FFFFFF" android:textSize="18sp" />
+    <TextView android:id="@+id/notice_banner" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="14dp" android:layout_marginTop="12dp" android:background="#244C43" android:textColor="#E2FFF3" android:textSize="18sp" android:visibility="gone" android:accessibilityLiveRegion="polite" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:layout_marginTop="16dp">
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="내 루틴" android:textSize="22sp" android:textColor="#FFFFFF" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/location_permission" android:layout_width="wrap_content" android:layout_height="56dp" android:text="위치 권한" android:layout_marginEnd="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/reconnect" android:layout_width="wrap_content" android:layout_height="56dp" android:text="다시 연결" android:layout_marginEnd="12dp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/add_routine" android:layout_width="wrap_content" android:layout_height="56dp" android:text="+ 루틴 추가" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
+        <ScrollView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" android:fillViewport="true">
+            <LinearLayout android:id="@+id/routine_list" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+        </ScrollView>
+        <ScrollView android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="2" android:layout_marginStart="20dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp" android:background="#172337">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="최근 실행" android:textColor="#73DFC0" android:textSize="18sp" />
+                <TextView android:id="@+id/history" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="#D6E2F0" android:textSize="16sp" android:lineSpacingExtra="5dp" android:textIsSelectable="true" />
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+</LinearLayout>
